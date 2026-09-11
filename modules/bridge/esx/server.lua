@@ -123,6 +123,24 @@ function server.isPlayerBoss(playerId)
 	return xPlayer.job.grade_name == 'boss'
 end
 
+---@diagnostic disable-next-line: duplicate-set-field
+function server.getAccountMoney(inv, account)
+	local player = server.GetPlayerFromId(inv.id)
+	if not player then return end
+	local acc = player.getAccount(account)
+	return acc and acc.money
+end
+
+---@diagnostic disable-next-line: duplicate-set-field
+function server.removeAccountMoney(inv, account, amount)
+	local player = server.GetPlayerFromId(inv.id)
+	if not player then return false end
+	local acc = player.getAccount(account)
+	if not acc or acc.money < amount then return false end
+	player.removeAccountMoney(account, amount)
+	return true
+end
+
 MySQL.ready(function()
 	MySQL.insert('INSERT IGNORE INTO `licenses` (`type`, `label`) VALUES (?, ?)', { 'weapon', 'Weapon License'})
 end)

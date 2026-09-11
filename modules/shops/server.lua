@@ -24,6 +24,7 @@ local function setupShopItems(id, shopType, shopName, groups)
 		local Item = Items(slot.name)
 
 		if Item then
+			local category = slot.category
 			---@type OxShopItem
 			slot = {
 				name = Item.name,
@@ -34,7 +35,8 @@ local function setupShopItems(id, shopType, shopName, groups)
 				metadata = slot.metadata,
 				license = slot.license,
 				currency = slot.currency,
-				grade = slot.grade
+				grade = slot.grade,
+				category = category
 			}
 
 			if slot.metadata then
@@ -61,6 +63,9 @@ local function registerShopType(shopType, properties)
 			items = properties.inventory,
 			slots = #properties.inventory,
 			type = 'shop',
+			categories = properties.categories,
+			tax = properties.tax ~= nil and properties.tax or server.shoptax,
+			address = properties.address,
 		}
 
 		setupShopItems(nil, shopType, properties.name, properties.groups or properties.jobs)
@@ -101,6 +106,9 @@ local function createShop(shopType, id)
 		type = 'shop',
 		coords = coords,
 		distance = shared.target and shop.targets?[id]?.distance,
+		categories = shop.categories,
+		tax = shop.tax ~= nil and shop.tax or server.shoptax,
+		address = (type(store) == 'table' and store.address) or (shop.addresses and shop.addresses[id]) or shop.address,
 	}
 
 	setupShopItems(id, shopType, shop.name, groups)
@@ -296,6 +304,181 @@ lib.callback.register('ox_inventory:buyItem', function(source, data)
 			return false, false, { type = 'error', description = locale('unable_stack_items') }
 		end
 	end
+end)
+
+lib.callback.register('ox_inventory:checkoutShop', function(source, data)
+	local playerInv = Inventory(source)
+	if not playerInv or not playerInv.currentShop then return false end
+	if type(data) ~= 'table' or type(data.items) ~= 'table' or #data.items < 1 then return false end
+	local payment = data.payment
+	if payment ~= 'cash' and payment ~= 'card' and payment ~= 'giftcard' then
+		payment = 'cash'
+	end
+	local shopType, shopId = playerInv.currentShop:match('^(.-) (%d-)$')
+	if not shopType then shopType = playerInv.currentShop end
+	if shopId then shopId = tonumber(shopId) end
+	local shop = shopId and Shops[shopType][shopId] or Shops[shopType]
+	if not shop then return false end
+	local lines = {}
+	local moneyTotal = 0
+	local otherCosts = {}
+	local addedWeight = 0
+	for i = 1, #data.items do
+		local entry = data.items[i]
+		local fromData = shop.items[entry.fromSlot]
+		if not fromData then
+			return false, false, { type = 'error', description = locale('shop_nostock') }
+		end
+		local count = math.floor(tonumber(entry.count) or 1)
+		if count < 1 then return false end
+		if fromData.count then
+			if fromData.count == 0 then
+				return false, false, { type = 'error', description = locale('shop_nostock') }
+			elseif count > fromData.count then
+				count = fromData.count
+			end
+		end
+		if fromData.license and server.hasLicense and not server.hasLicense(playerInv, fromData.license) then
+			return false, false, { type = 'error', description = locale('item_unlicensed') }
+		end
+		if fromData.grade then
+			local _, rank = server.hasGroup(playerInv, shop.groups)
+			if not isRequiredGrade(fromData.grade, rank) then
+				return false, false, { type = 'error', description = locale('stash_lowgrade') }
+			end
+		end
+		local fromItem = Items(fromData.name)
+		if not fromItem then return false end
+		local result = fromItem.cb and fromItem.cb('buying', fromItem, playerInv, entry.fromSlot, shop)
+		if result == false then return false end
+		local metadata, metaCount = Items.Metadata(playerInv, fromItem, fromData.metadata and table.clone(fromData.metadata) or {}, count)
+		local price = metaCount * fromData.price
+		local currency = fromData.currency or 'money'
+		lines[#lines + 1] = {
+			fromData = fromData,
+			fromItem = fromItem,
+			count = metaCount,
+			metadata = metadata,
+			price = price,
+			currency = currency,
+			fromSlot = entry.fromSlot,
+		}
+		if currency == 'money' then
+			moneyTotal += price
+		else
+			otherCosts[currency] = (otherCosts[currency] or 0) + price
+		end
+		addedWeight += (fromItem.weight + (metadata?.weight or 0)) * metaCount
+	end
+	if playerInv.weight + addedWeight > playerInv.maxWeight then
+		return false, false, { type = 'error', description = locale('cannot_carry') }
+	end
+	local reserved = 0
+	local seenStack = {}
+	for i = 1, #lines do
+		local line = lines[i]
+		if line.fromItem.stack then
+			local key = line.fromItem.name
+			if not seenStack[key] then
+				local slot = Inventory.GetSlotForItem(playerInv, line.fromItem.name, line.metadata)
+				if not (slot and playerInv.items[slot]) then
+					reserved += 1
+				end
+				seenStack[key] = true
+			end
+		else
+			reserved += line.count
+		end
+	end
+	local empty = 0
+	for i = 1, playerInv.slots do
+		if not playerInv.items[i] then empty += 1 end
+	end
+	if reserved > empty then
+		return false, false, { type = 'error', description = locale('cannot_carry') }
+	end
+	local taxValue = shop.tax
+	if taxValue == nil then taxValue = server.shoptax or 0 end
+	local taxRate = taxValue / 100
+	local taxed = math.ceil(moneyTotal * (1 + taxRate))
+	if moneyTotal > 0 then
+		if payment == 'card' then
+			local bank = server.getAccountMoney(playerInv, 'bank')
+			if bank == nil then
+				local canAfford = canAffordItem(playerInv, 'money', taxed)
+				if canAfford ~= true then return false, false, canAfford end
+				payment = 'cash'
+			elseif bank < taxed then
+				return false, false, { type = 'error', description = locale('cannot_afford', ('%s%s'):format(locale('$'), math.groupdigits(taxed))) }
+			end
+		elseif payment == 'giftcard' then
+			if not Items('giftcard') then
+				return false, false, { type = 'error', description = locale('cannot_afford', 'Gift Card') }
+			end
+			local canAfford = canAffordItem(playerInv, 'giftcard', taxed)
+			if canAfford ~= true then return false, false, canAfford end
+		else
+			local canAfford = canAffordItem(playerInv, 'money', taxed)
+			if canAfford ~= true then return false, false, canAfford end
+		end
+	end
+	for currency, amount in pairs(otherCosts) do
+		local canAfford = canAffordItem(playerInv, currency, amount)
+		if canAfford ~= true then return false, false, canAfford end
+	end
+	for i = 1, #lines do
+		local line = lines[i]
+		if not TriggerEventHooks('buyItem', {
+			source = source,
+			shopType = shopType,
+			shopId = shopId,
+			toInventory = playerInv.id,
+			fromSlot = line.fromData,
+			itemName = line.fromData.name,
+			metadata = line.metadata,
+			count = line.count,
+			price = line.fromData.price,
+			totalPrice = line.price,
+			currency = line.currency,
+			payment = payment,
+		}) then return false end
+	end
+	local shopItems = {}
+	for i = 1, #lines do
+		local line = lines[i]
+		local success = Inventory.AddItem(playerInv, line.fromItem.name, line.count, line.metadata)
+		if not success then
+			return false, false, { type = 'error', description = locale('cannot_carry') }
+		end
+		if line.fromData.count then
+			shop.items[line.fromSlot].count = line.fromData.count - line.count
+			shopItems[#shopItems + 1] = { item = shop.items[line.fromSlot], inventory = 'shop' }
+		end
+	end
+	if moneyTotal > 0 then
+		if payment == 'card' then
+			if not server.removeAccountMoney(playerInv, 'bank', taxed, 'shop-purchase') then
+				return false, false, { type = 'error', description = locale('cannot_afford', ('%s%s'):format(locale('$'), math.groupdigits(taxed))) }
+			end
+		elseif payment == 'giftcard' then
+			removeCurrency(playerInv, 'giftcard', taxed)
+		else
+			removeCurrency(playerInv, 'money', taxed)
+		end
+	end
+	for currency, amount in pairs(otherCosts) do
+		removeCurrency(playerInv, currency, amount)
+	end
+	if server.syncInventory then server.syncInventory(playerInv) end
+	local extra = 0
+	local bought = 0
+	for _, amount in pairs(otherCosts) do extra += amount end
+	for i = 1, #lines do bought += lines[i].count end
+	local message = locale('purchased_for', bought, 'items', locale('$'), math.groupdigits(taxed + extra))
+	if server.loglevel > 0 then
+		lib.logger(playerInv.owner, 'buyItem', ('"%s" %s'):format(playerInv.label, message:lower()), ('shop:%s'):format(shop.label))
+	end
+	return true, { shopItems = shopItems }, { type = 'success', description = message }
 end)
 
 server.shops = Shops

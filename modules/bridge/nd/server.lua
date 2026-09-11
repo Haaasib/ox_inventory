@@ -122,3 +122,21 @@ end
 function server.getOwnedVehicleId(entityId)
     return NDCore.getVehicle(entityId)?.id
 end
+
+---@diagnostic disable-next-line: duplicate-set-field
+function server.getAccountMoney(inv, account)
+    local player = NDCore.getPlayer(inv.id)
+    if not player then return end
+    account = account == 'money' and 'cash' or account
+    return player.getData(account)
+end
+
+---@diagnostic disable-next-line: duplicate-set-field
+function server.removeAccountMoney(inv, account, amount, reason)
+    local player = NDCore.getPlayer(inv.id)
+    if not player then return false end
+    account = account == 'money' and 'cash' or account
+    if (player.getData(account) or 0) < amount then return false end
+    player.deductMoney(account, amount, reason or 'shop-purchase')
+    return true
+end

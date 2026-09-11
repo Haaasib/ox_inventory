@@ -218,6 +218,11 @@ return {
 		}
 	},
 
+	['giftcard'] = {
+		label = 'Gift Card',
+		weight = 10,
+	},
+
 	['scrapmetal'] = {
 		label = 'Scrap Metal',
 		weight = 80,

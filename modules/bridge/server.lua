@@ -50,6 +50,20 @@ function server.buyLicense()
 	warn('Licenses are not supported for the current framework.')
 end
 
+---@param inv table
+---@param account string
+---@return number?
+function server.getAccountMoney(inv, account) end
+
+---@param inv table
+---@param account string
+---@param amount number
+---@param reason? string
+---@return boolean
+function server.removeAccountMoney(inv, account, amount, reason)
+	return false
+end
+
 local Inventory = require 'modules.inventory.server'
 
 function server.playerDropped(source)

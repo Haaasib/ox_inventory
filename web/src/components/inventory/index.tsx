@@ -3,11 +3,12 @@ import useNuiEvent from '../../hooks/useNuiEvent';
 import InventoryControl from './InventoryControl';
 import InventoryHotbar from './InventoryHotbar';
 import { useAppDispatch, useAppSelector } from '../../store';
-import { refreshSlots, selectInventoryMode, setAdditionalMetadata, setupInventory } from '../../store/inventory';
+import { refreshSlots, selectInventoryMode, selectRightInventory, setAdditionalMetadata, setupInventory } from '../../store/inventory';
 import { useExitListener } from '../../hooks/useExitListener';
 import type { Inventory as InventoryProps, InventoryMode } from '../../typings';
 import RightInventory from './RightInventory';
 import LeftInventory from './LeftInventory';
+import Shop from './Shop';
 import Tooltip from '../utils/Tooltip';
 import { closeTooltip } from '../../store/tooltip';
 import InventoryContext from './InventoryContext';
@@ -62,7 +63,9 @@ const Inventory: React.FC = () => {
   const [search, setSearch] = useState('');
   const dispatch = useAppDispatch();
   const mode = useAppSelector(selectInventoryMode);
+  const rightInventory = useAppSelector(selectRightInventory);
   const isQuick = mode === 'quick';
+  const isShop = rightInventory.type === 'shop';
   useNuiEvent<boolean>('setInventoryVisible', setInventoryVisible);
   useNuiEvent<false>('closeInventory', () => {
     setInventoryVisible(false);
@@ -90,24 +93,32 @@ const Inventory: React.FC = () => {
   return (
     <>
       <Fade in={inventoryVisible}>
-        <div className={`inventory-wrapper${isQuick ? ' is-quick' : ''}`}>
-          <div className={`inventory-shell${isQuick ? ' is-quick' : ''}`}>
-            <LeftInventory search={search} />
-            {!isQuick && (
-              <div className="inventory-other">
-                <div className="inventory-search">
-                  <Search size={16} className="inventory-search-icon" />
-                  <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="SEARCH..." maxLength={100} />
-                  <span className="inventory-search-count">{search.length}/100</span>
-                </div>
-                <RightInventory search={search} />
-              </div>
-            )}
+        {isShop ? (
+          <div className="inventory-wrapper is-shop">
+            <Shop />
+            <Tooltip />
+            <InventoryContext />
           </div>
-          <Footer isQuick={isQuick} />
-          <Tooltip />
-          <InventoryContext />
-        </div>
+        ) : (
+          <div className={`inventory-wrapper${isQuick ? ' is-quick' : ''}`}>
+            <div className={`inventory-shell${isQuick ? ' is-quick' : ''}`}>
+              <LeftInventory search={search} />
+              {!isQuick && (
+                <div className="inventory-other">
+                  <div className="inventory-search">
+                    <Search size={16} className="inventory-search-icon" />
+                    <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="SEARCH..." maxLength={100} />
+                    <span className="inventory-search-count">{search.length}/100</span>
+                  </div>
+                  <RightInventory search={search} />
+                </div>
+              )}
+            </div>
+            <Footer isQuick={isQuick} />
+            <Tooltip />
+            <InventoryContext />
+          </div>
+        )}
       </Fade>
       <InventoryHotbar />
     </>

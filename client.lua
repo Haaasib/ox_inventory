@@ -198,6 +198,18 @@ function client.openInventory(inv, data)
         end
 
         left, right, accessError = lib.callback.await('ox_inventory:openShop', 200, data)
+        if right then
+            local coords = right.coords or GetEntityCoords(playerPed)
+            local x = coords.x or coords[1]
+            local y = coords.y or coords[2]
+            local z = coords.z or coords[3]
+            local streetHash = GetStreetNameAtCoord(x + 0.0, y + 0.0, z + 0.0)
+            local street = GetStreetNameFromHashKey(streetHash)
+            local zone = GetLabelText(GetNameOfZone(x + 0.0, y + 0.0, z + 0.0))
+            if street == '' then street = 'Unknown Street' end
+            if zone == '' or zone == 'NULL' then zone = 'San Andreas' end
+            right.address = { street, zone }
+        end
     elseif inv == 'crafting' then
         if cache.vehicle then
             return lib.notify({ id = 'cannot_perform', type = 'error', description = locale('cannot_perform') })
@@ -1912,6 +1924,20 @@ RegisterNUICallback('buyItem', function(data, cb)
 	end
 
 	cb(response)
+end)
+
+RegisterNUICallback('checkoutShop', function(data, cb)
+	local response, payload, message = lib.callback.await('ox_inventory:checkoutShop', 100, data)
+	if payload and payload.shopItems and #payload.shopItems > 0 then
+		SendNUIMessage({
+			action = 'refreshSlots',
+			data = { items = payload.shopItems }
+		})
+	end
+	if message then
+		lib.notify(message)
+	end
+	cb(response and true or false)
 end)
 
 RegisterNUICallback('craftItem', function(data, cb)

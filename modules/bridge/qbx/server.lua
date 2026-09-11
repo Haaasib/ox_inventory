@@ -105,3 +105,21 @@ end
 function server.getOwnedVehicleId(entityId)
     return Entity(entityId).state.vehicleid or exports.qbx_vehicles:GetVehicleIdByPlate(GetVehicleNumberPlateText(entityId))
 end
+
+---@diagnostic disable-next-line: duplicate-set-field
+function server.getAccountMoney(inv, account)
+    local player = QBX:GetPlayer(inv.id)
+    if not player then return end
+    account = account == 'money' and 'cash' or account
+    return player.Functions.GetMoney(account)
+end
+
+---@diagnostic disable-next-line: duplicate-set-field
+function server.removeAccountMoney(inv, account, amount, reason)
+    local player = QBX:GetPlayer(inv.id)
+    if not player then return false end
+    account = account == 'money' and 'cash' or account
+    if (player.Functions.GetMoney(account) or 0) < amount then return false end
+    player.Functions.RemoveMoney(account, amount, reason or 'shop-purchase')
+    return true
+end

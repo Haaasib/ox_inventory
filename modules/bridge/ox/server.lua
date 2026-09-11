@@ -61,3 +61,19 @@ end
 function server.getOwnedVehicleId(entityId)
     return Ox.GetVehicleFromEntity(entityId)?.id
 end
+
+---@diagnostic disable-next-line: duplicate-set-field
+function server.getAccountMoney(inv, account)
+	local player = Ox.GetPlayer(inv.id)
+	if not player then return end
+	return player.getAccount(account)
+end
+
+---@diagnostic disable-next-line: duplicate-set-field
+function server.removeAccountMoney(inv, account, amount)
+	local player = Ox.GetPlayer(inv.id)
+	if not player then return false end
+	if (player.getAccount(account) or 0) < amount then return false end
+	player.removeAccountBalance(account, amount)
+	return true
+end

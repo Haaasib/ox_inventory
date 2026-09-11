@@ -10,6 +10,7 @@ Redesign by **Haaasib**. Full credit to **[Overextended](https://github.com/over
 
 ![Quick Stash](preview/quick-stash.png)
 ![Full Stash](preview/full-view.png)
+![Shop](preview/shop.png)
 
 ---
 

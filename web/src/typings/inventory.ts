@@ -9,6 +9,11 @@ export enum InventoryType {
   NEWDROP = 'newdrop',
 }
 
+export type ShopCategory = {
+  id: string;
+  label: string;
+};
+
 export type Inventory = {
   id: string;
   type: string;
@@ -17,4 +22,7 @@ export type Inventory = {
   maxWeight?: number;
   label?: string;
   groups?: Record<string, number>;
+  categories?: ShopCategory[];
+  tax?: number;
+  address?: string[];
 };
