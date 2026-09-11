@@ -216,7 +216,7 @@ export const MenuComponent = React.forwardRef<HTMLButtonElement, MenuProps & Rea
                   <FloatingFocusManager context={context} modal={true} initialFocus={refs.floating}>
                     <div
                       ref={refs.setFloating}
-                      className="context-menu-list"
+                      className={isNested ? 'context-menu-list' : 'context-menu-list is-root'}
                       style={{ ...floatingStyles, ...styles }}
                       {...getFloatingProps()}
                     >
@@ -254,6 +254,7 @@ export const MenuItem = React.forwardRef<
       type="button"
       role="menuitem"
       className="context-menu-item"
+      data-active={isActive ? '' : undefined}
       tabIndex={isActive ? 0 : -1}
       disabled={disabled}
       {...menu.getItemProps({
